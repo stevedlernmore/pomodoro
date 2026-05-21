@@ -1077,7 +1077,8 @@ function fetchUserProfile() {
     userProfile = p;
     showUserInfo(p);
     loadScoreboard();
-    syncToSheets();
+    // Only sync if we actually have sessions to write today
+    if (todaySessions > 0) { syncToSheets(); }
   })
   .catch(() => {});
 }
@@ -1109,6 +1110,7 @@ function formatDate(d) {
 
 async function syncToSheets() {
   if (!accessToken) return;
+  if (todaySessions === 0) return; // never overwrite with zeros
 
   const today = new Date();
   const dateStr = formatDate(today);
