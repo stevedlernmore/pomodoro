@@ -890,6 +890,49 @@ function updateDisplay() {
   document.getElementById('timer-arc').style.strokeDashoffset = offset;
 }
 
+// ─── AUDIO ───────────────────────────────────────────────────────────────────
+function playChime(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    if (type === 'focus') {
+      // Three rising tones — satisfying completion sound
+      const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const start = ctx.currentTime + i * 0.18;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.35, start + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.6);
+        osc.start(start);
+        osc.stop(start + 0.6);
+      });
+    } else {
+      // Two soft descending tones — gentle break-end nudge
+      const notes = [659.25, 523.25]; // E5, C5
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const start = ctx.currentTime + i * 0.22;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.25, start + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
+        osc.start(start);
+        osc.stop(start + 0.5);
+      });
+    }
+  } catch(e) {}
+}
+
 function onFocusComplete() {
   todaySessions++;
   todayMinutes += 25;
@@ -919,6 +962,7 @@ function onFocusComplete() {
   document.getElementById('overlay-sub').textContent =
     'Session ' + todaySessions + ' complete. ' + (25 * todaySessions) + ' minutes focused today.';
   document.getElementById('session-complete-overlay').classList.add('show');
+  playChime('focus');
 
   // Request notification permission
   if (Notification.permission === 'default') {
@@ -927,6 +971,7 @@ function onFocusComplete() {
 }
 
 function onBreakComplete() {
+  playChime('break');
   showToast('Break over! Ready to focus?', 'success');
   resetTimer();
   setMode('focus');
