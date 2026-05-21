@@ -1286,6 +1286,27 @@ async function loadScoreboard() {
     const data = await resp.json();
     allSheetRows = (data.values || []).slice(1).filter(r => r[0] && (r[1] || r[2]));
 
+    // Sync today's data FROM sheet INTO local state (sheet is source of truth)
+    const todayStr = formatDate(new Date());
+    const todayRow = allSheetRows.find(r => r[0] === todayStr);
+    if (todayRow) {
+      const sheetSessions = parseInt(todayRow[1]) || 0;
+      const sheetMinutes = parseInt(todayRow[2]) || 0;
+      // Only update local if sheet has MORE data (prevents overwrite on fresh load)
+      if (sheetSessions > todaySessions) {
+        todaySessions = sheetSessions;
+        todayMinutes = sheetMinutes;
+        saveLocal();
+        updateTodayDisplay();
+        // Restore dots
+        const dotPos = todaySessions % 4 || (todaySessions > 0 ? 4 : 0);
+        setCount = dotPos;
+        for (let i = 1; i <= 4; i++) {
+          document.getElementById('dot-' + i).classList.toggle('filled', i <= setCount);
+        }
+      }
+    }
+
     // Render weekly chart
     renderWeek();
 
