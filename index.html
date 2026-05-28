@@ -761,9 +761,14 @@
   <div class="scoreboard">
     <div class="scoreboard-header">
       <div class="scoreboard-title">History</div>
-      <button class="scoreboard-refresh" onclick="loadScoreboard()">
-        &#8635; Refresh
-      </button>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <a class="scoreboard-refresh" href="https://docs.google.com/spreadsheets/d/1_qVAkqRRZwlrRn1y74A0W0EsgTzkvqatIKARtR9E-t4" target="_blank" rel="noopener" style="text-decoration:none;">
+          &#8599; Open Sheet
+        </a>
+        <button class="scoreboard-refresh" onclick="loadScoreboard()">
+          &#8635; Refresh
+        </button>
+      </div>
     </div>
     <div id="scoreboard-content">
       <div id="signin-prompt">
@@ -804,6 +809,7 @@ let totalSeconds = 25 * 60;
 let remaining = totalSeconds;
 let running = false;
 let interval = null;
+let endTime = null; // wall-clock ms when timer hits zero (null when paused)
 let accessToken = null;
 let userProfile = null;
 let todaySessions = 0;
@@ -842,22 +848,28 @@ function toggleTimer() {
 function startTimer() {
   if (remaining <= 0) { resetTimer(); return; }
   running = true;
+  endTime = Date.now() + remaining * 1000;
   document.getElementById('main-btn').textContent = 'Pause';
   document.getElementById('main-btn').classList.add('running');
   document.getElementById('timer-hint').textContent = 'click to pause';
-  interval = setInterval(tick, 1000);
+  interval = setInterval(tick, 250);
+  tick();
 }
 
 function pauseTimer() {
+  if (running) { remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000)); }
   running = false;
+  endTime = null;
   clearInterval(interval);
   document.getElementById('main-btn').textContent = 'Resume';
   document.getElementById('main-btn').classList.remove('running');
   document.getElementById('timer-hint').textContent = 'click to resume';
+  updateDisplay();
 }
 
 function resetTimer() {
   running = false;
+  endTime = null;
   clearInterval(interval);
   remaining = MODES[mode].seconds;
   document.getElementById('main-btn').textContent = 'Start';
@@ -867,11 +879,13 @@ function resetTimer() {
 }
 
 function tick() {
-  remaining--;
+  if (!running || endTime == null) return;
+  remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
   updateDisplay();
   if (remaining <= 0) {
     clearInterval(interval);
     running = false;
+    endTime = null;
     if (mode === 'focus') {
       onFocusComplete();
     } else {
@@ -1144,8 +1158,21 @@ async function syncToSheets() {
         }
       );
     } else {
-      // Update existing row — only write column B (sessions)
-      // Leave column C alone so formulas like =IF(B2="","",B2*25) work
+      // Update existing row — sheet is source of truth; only write if our value is GREATER.
+      const existingSessions = parseInt(rows[rowIndex - 1][1]) || 0;
+      if (todaySessions <= existingSessions) {
+        // Sheet has equal/higher value (e.g. manual override) — adopt it locally instead of overwriting.
+        if (existingSessions > todaySessions) {
+          todaySessions = existingSessions;
+          todayMinutes = parseInt(rows[rowIndex - 1][2]) || todayMinutes;
+          saveLocal();
+          updateTodayDisplay();
+        }
+        showToast('Sheet already up to date', 'success');
+        loadScoreboard();
+        return;
+      }
+      // Only write column B (sessions); leave column C alone so any formulas keep working.
       await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Sheet1!B${rowIndex}?valueInputOption=USER_ENTERED`,
         {
@@ -1421,11 +1448,10 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-// Page visibility — pause/resume
+// Page visibility — keep running, just resync the display from wall clock when we come back
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && running) {
-    // Keep running — just note the time
-    localStorage.setItem('pomo_bg_at', Date.now());
+  if (!document.hidden && running && endTime != null) {
+    tick();
   }
 });
 </script>
